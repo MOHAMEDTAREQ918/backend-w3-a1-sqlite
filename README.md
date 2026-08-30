@@ -1,56 +1,57 @@
-# FlyRank Backend Track - Auth Login & Protect (Supabase Auth)
+# Web Scraping Track - Build a Polite Scraper
 
 ## Overview
-This project builds a secure authentication system using **Supabase Auth** as the Identity Provider (IdP). It manages user accounts, issues secure JSON Web Tokens (JWTs), and enforces token verification via Middleware to protect sensitive endpoints.
+This project builds a polite, robust, and validated web scraper in Node.js. It extracts 60 book records across 3 pages from `books.toscrape.com`, cleans raw text strings (e.g., converting `"£51.77"` to `51.77`), validates every record against a schema, handles errors gracefully without crashing, and saves the result to `books.json`.
 
 ---
 
-## How to Run Locally 🚀
+## Polite Scraping Principles Implemented 🤝
+1. **Robots & Rules Check:** Respects `robots.txt` guidelines of practice sites.
+2. **Identification (User-Agent):** Sends a custom `User-Agent` header identify who is running the scraper and how to contact them.
+3. **Rate Limiting (Delays):** Includes a mandatory 1-second delay between page requests to prevent server hammering.
+4. **Resilience:** Wraps HTTP requests in `try/catch` blocks so broken pages or network timeouts do not break the execution loop.
+
+---
+
+## How to Run 🚀
 
 1. Clone the repository and install dependencies:
-bash
-npm install
+1.5. تعديل README.md:كتابة التوثيق وشرح طريقة التشغيل.افتح ملف README.md واضغط على القلم ✏️ للتعديل.ضع المحتوى التالي بالكامل:Markdown# Web Scraping Track - Build a Polite Scraper
 
-
-2. Create a `.env` file based on `.env.example`:
-bash
-cp .env.example .env
-
-
-3. Fill in your Supabase credentials in `.env`:
-env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
-PORT=3000
-
-
-4. Start the server:
-bash
-npm start
-
-
-5. Access Swagger UI docs at: `http://localhost:3000/docs`
+## Overview
+This project builds a polite, robust, and validated web scraper in Node.js. It extracts 60 book records across 3 pages from `books.toscrape.com`, cleans raw text strings (e.g., converting `"£51.77"` to `51.77`), validates every record against a schema, handles errors gracefully without crashing, and saves the result to `books.json`.
 
 ---
 
-## API Reference
-
-| Method | Endpoint | Description | Auth Required | Status Codes |
-|---|---|---|---|---|
-| POST | `/auth/signup` | Register a new user | ❌ No | 201, 400 |
-| POST | `/auth/login` | Authenticate & receive JWT | ❌ No | 200, 400, 401 |
-| POST | `/auth/logout` | Terminate session | ✅ Bearer JWT | 204, 401 |
-| GET | `/public/info` | Public open endpoint | ❌ No | 200 |
-| GET | `/protected/profile` | Access private user profile | ✅ Bearer JWT | 200, 401 |
+## Polite Scraping Principles Implemented 🤝
+1. **Robots & Rules Check:** Respects `robots.txt` guidelines of practice sites.
+2. **Identification (User-Agent):** Sends a custom `User-Agent` header identify who is running the scraper and how to contact them.
+3. **Rate Limiting (Delays):** Includes a mandatory 1-second delay between page requests to prevent server hammering.
+4. **Resilience:** Wraps HTTP requests in `try/catch` blocks so broken pages or network timeouts do not break the execution loop.
 
 ---
 
-## AI vs Me (Stage 7)
+## How to Run 🚀
+
+1. Clone the repository and install dependencies:
+bashnpm install
+2. Run the scraper:
+bashnpm start
+3. Output will be generated at `books.json`.
+
+---
+
+## Data Schema (`books.json`)
+
+json[{"title": "A Light in the Attic","price": 51.77,"availability": "In stock","rating": "Three"}]
+---
+
+## AI vs Me
 
 ### Prompt Used:
-> "Build an Express.js API integrating Supabase Auth for signup, login, logout, and token-protected routes. Implement a reusable authentication middleware to verify Bearer JWT tokens, return correct HTTP status codes (201, 200, 204, 400, 401), and configure Swagger UI with BearerAuth security scheme."
+> "Write a Node.js web scraper using axios and cheerio that collects 60 books from 3 pages of books.toscrape.com. Include custom User-Agent, delay between requests, price parsing to numbers, schema validation, and error handling for broken pages."
 
 ### Comparisons & Findings:
-1. **Header Parsing:** AI attempted to pass the full `Authorization` header directly to Supabase without stripping the `Bearer ` prefix. Corrected by extracting `header.split(' ')[1]`.
-2. **Error Status Codes:** AI returned `400 Bad Request` on invalid token verification. Fixed to strictly return `401 Unauthorized` as per standard REST security protocols.
-3. **Swagger Integration:** AI forgot to link `security: [{ BearerAuth: [] }]` to individual paths in OpenAPI specs, hiding the padlock button. Added the correct specification block.
+1. **Rate Limiting:** AI generated sequential `axios.get` calls without any pause. Added `await sleep(1000)` between pages to ensure politeness.
+2. **Price Parsing:** AI used `parseFloat(price.replace('£', ''))`, which breaks if other currency symbols or weird HTML entities appear. Replaced with regex `price.replace(/[^0-9.]/g, '')` for safety.
+3. **Fault Tolerance:** AI's loop crashed completely when testing a simulated 404/500 error. Wrapped individual page fetches in `try/catch` returning an empty list to keep the rest of the execution alive.
