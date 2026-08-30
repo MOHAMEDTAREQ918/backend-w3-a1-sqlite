@@ -1,60 +1,56 @@
-# FlyRank Backend Track - W3·A3: Containerize Your Stack (Docker + Postgres)
+# FlyRank Backend Track - Auth Login & Protect (Supabase Auth)
 
 ## Overview
-This project completes the third storage evolution of our Task API:
-`In-Memory (A1)` ➡️ `SQLite File (A2)` ➡️ `Containerized PostgreSQL (A3)`.
-
-The API endpoints, HTTP status codes, validation rules, and JSON shapes remain completely identical, proving that storage is an implementation detail.
+This project builds a secure authentication system using **Supabase Auth** as the Identity Provider (IdP). It manages user accounts, issues secure JSON Web Tokens (JWTs), and enforces token verification via Middleware to protect sensitive endpoints.
 
 ---
 
-## One-Command Startup 🚀
-To run the full stack (Node.js API + PostgreSQL Database), run:
+## How to Run Locally 🚀
+
+1. Clone the repository and install dependencies:
+bash
+npm install
+
+
+2. Create a `.env` file based on `.env.example`:
 bash
 cp .env.example .env
-docker compose up
-This single command builds the application, pulls the official PostgreSQL image, sets up the network, attaches a persistent volume, and starts the service.
+
+
+3. Fill in your Supabase credentials in `.env`:
+env
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+PORT=3000
+
+
+4. Start the server:
+bash
+npm start
+
+
+5. Access Swagger UI docs at: `http://localhost:3000/docs`
 
 ---
 
-## API Endpoints
+## API Reference
 
-| Method | Endpoint | Description | Status Codes |
-|---|---|---|---|
-| GET | `/` | API Info | 200 |
-| GET | `/health` | DB Health Check (`SELECT 1`) | 200 / 500 |
-| GET | `/tasks` | List all tasks | 200 |
-| GET | `/tasks/:id` | Get single task | 200, 404 |
-| POST | `/tasks` | Create task | 201, 400 |
-| PUT | `/tasks/:id` | Update task | 200, 404 |
-| DELETE | `/tasks/:id` | Delete task | 204, 404 |
+| Method | Endpoint | Description | Auth Required | Status Codes |
+|---|---|---|---|---|
+| POST | `/auth/signup` | Register a new user | ❌ No | 201, 400 |
+| POST | `/auth/login` | Authenticate & receive JWT | ❌ No | 200, 400, 401 |
+| POST | `/auth/logout` | Terminate session | ✅ Bearer JWT | 204, 401 |
+| GET | `/public/info` | Public open endpoint | ❌ No | 200 |
+| GET | `/protected/profile` | Access private user profile | ✅ Bearer JWT | 200, 401 |
 
 ---
 
-## Sample Response (`curl -i http://localhost:3000/tasks`)
-http
-HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-
-[
-{ "id": 1, "title": "Buy groceries", "done": false },
-{ "id": 2, "title": "Finish Backend Assignment W3-A3", "done": false },
-{ "id": 3, "title": "Learn Docker & Postgres", "done": true }
-]
----
-
-## Data Persistence & Volumes
-Data persistence is handled by a Docker named volume (`taskdata`) mounted at `/var/lib/postgresql/data`.
-Running `docker compose down` and `docker compose up` preserves all rows safely.
-
----
-
-## AI vs Me (Stage 6)
+## AI vs Me (Stage 7)
 
 ### Prompt Used:
-> "Containerize a Node.js Express task CRUD API with PostgreSQL database using Docker and Docker Compose. Use parameterized queries with pg driver, read secrets from .env, ensure idempotent table creation and initial seeding, configure named volume persistence, and allow one-command startup with docker compose up."
+> "Build an Express.js API integrating Supabase Auth for signup, login, logout, and token-protected routes. Implement a reusable authentication middleware to verify Bearer JWT tokens, return correct HTTP status codes (201, 200, 204, 400, 401), and configure Swagger UI with BearerAuth security scheme."
 
 ### Comparisons & Findings:
-1. **Health Check:** AI generated a basic `/health` returning `{ status: "ok" }`, whereas my implementation runs an actual SQL query (`SELECT 1`) against Postgres to verify database connectivity before returning `200 OK`.
-2. **Database Host Name:** AI mistakenly used `localhost` in `DATABASE_URL` inside `compose.yaml`, which caused connection errors. Corrected it to the Compose service name `db`.
-3. **Volume Persistence:** AI correctly included `volumes:` mapping, confirming data survival across container restarts.
+1. **Header Parsing:** AI attempted to pass the full `Authorization` header directly to Supabase without stripping the `Bearer ` prefix. Corrected by extracting `header.split(' ')[1]`.
+2. **Error Status Codes:** AI returned `400 Bad Request` on invalid token verification. Fixed to strictly return `401 Unauthorized` as per standard REST security protocols.
+3. **Swagger Integration:** AI forgot to link `security: [{ BearerAuth: [] }]` to individual paths in OpenAPI specs, hiding the padlock button. Added the correct specification block.
