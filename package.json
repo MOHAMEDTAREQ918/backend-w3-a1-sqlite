@@ -1,0 +1,13 @@
+{
+  "name": "backend-w3-a3-docker-postgres",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "swagger-ui-express": "^5.0.1"
+  }
+}
