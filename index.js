@@ -1,138 +1,154 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 app.use(express.json());
 
-// 1. Connection using DATABASE_URL from .env
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@db:5432/tasks',
-});
+// Initialize Supabase Client
+const supabaseUrl = process.env.SUPABASE_URL || 'https://your-supabase-url.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'your-anon-key';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 2. Initialize Database Table & Initial Seed
-const initDb = async () => {
+console.log("Server running and connected to Supabase");
+
+// Middleware: Token Verification (Auth Guard)
+const authenticateToken = async (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: "Access token required" });
+  }
+
+  const token = authHeader.split(' ')[1];
+
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
-        done BOOLEAN DEFAULT false
-      )
-    `);
-
-    const res = await pool.query('SELECT COUNT(*) FROM tasks');
-    if (parseInt(res.rows[0].count, 10) === 0) {
-      await pool.query(
-        'INSERT INTO tasks (title, done) VALUES ($1, $2), ($3, $4), ($5, $6)',
-        ['Buy groceries', false, 'Finish Backend Assignment W3-A3', false, 'Learn Docker & Postgres', true]
-      );
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
     }
+    req.user = user;
+    req.token = token;
+    next();
   } catch (err) {
-    console.error('Database initialization error:', err);
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 };
 
-initDb();
+// Auth Routes
+app.post('/auth/signup', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
 
-// 3. API Endpoints
-app.get('/', (req, res) => {
-  res.json({ name: "Task API with Postgres", version: "1.0", endpoints: ["/tasks"] });
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  res.status(201).json(data);
 });
 
-// Real Health Check Endpoint (Stage Stretch)
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ status: "ok", db: "connected" });
-  } catch (err) {
-    res.status(500).json({ status: "error", db: "disconnected" });
+app.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
   }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    return res.status(401).json({ error: "Invalid login credentials" });
+  }
+
+  res.status(200).json({
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    user: data.user
+  });
 });
 
-// GET /tasks
-app.get('/tasks', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM tasks ORDER BY id ASC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+app.post('/auth/logout', authenticateToken, async (req, res) => {
+  const { error } = await supabase.auth.signOut(req.token);
+  if (error) {
+    return res.status(500).json({ error: error.message });
   }
+  res.status(204).send();
 });
 
-// GET /tasks/:id
-app.get('/tasks/:id', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "Task not found" });
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Public & Protected Routes
+app.get('/public/info', (req, res) => {
+  res.status(200).json({ message: "Welcome stranger! This info is public." });
 });
 
-// POST /tasks
-app.post('/tasks', async (req, res) => {
-  const { title } = req.body;
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    return res.status(400).json({ error: "Title is required" });
-  }
-  try {
-    const result = await pool.query(
-      'INSERT INTO tasks (title, done) VALUES ($1, $2) RETURNING *',
-      [title.trim(), false]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.get('/protected/profile', authenticateToken, (req, res) => {
+  res.status(200).json({
+    message: "Protected profile data retrieved successfully",
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      created_at: req.user.created_at
+    }
+  });
 });
 
-// PUT /tasks/:id
-app.put('/tasks/:id', async (req, res) => {
-  try {
-    const check = await pool.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
-    if (check.rows.length === 0) return res.status(404).json({ error: "Task not found" });
-
-    const task = check.rows[0];
-    const { title, done } = req.body;
-    const newTitle = title !== undefined ? title : task.title;
-    const newDone = done !== undefined ? done : task.done;
-
-    const result = await pool.query(
-      'UPDATE tasks SET title = $1, done = $2 WHERE id = $3 RETURNING *',
-      [newTitle, newDone, req.params.id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /tasks/:id
-app.delete('/tasks/:id', async (req, res) => {
-  try {
-    const check = await pool.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
-    if (check.rows.length === 0) return res.status(404).json({ error: "Task not found" });
-
-    await pool.query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
-    res.status(204).send();
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 4. Swagger Documentation
+// Swagger UI Documentation
 const swaggerDocument = {
   openapi: "3.0.0",
-  info: { title: "Task API with Postgres & Docker", version: "1.0.0" },
+  info: { title: "Auth & Protected Routes API", version: "1.0.0" },
+  components: {
+    securitySchemes: {
+      BearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT"
+      }
+    }
+  },
   paths: {
-    "/tasks": {
-      get: { summary: "Get all tasks", responses: { "200": { description: "OK" } } },
-      post: { summary: "Create a task", responses: { "201": { description: "Created" } } }
+    "/auth/signup": {
+      post: {
+        summary: "Sign Up new user",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", properties: { email: { type: "string" }, password: { type: "string" } } } } }
+        },
+        responses: { "201": { description: "Created" }, "400": { description: "Bad Request" } }
+      }
+    },
+    "/auth/login": {
+      post: {
+        summary: "Log In user and get JWT",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", properties: { email: { type: "string" }, password: { type: "string" } } } } }
+        },
+        responses: { "200": { description: "OK" }, "401": { description: "Unauthorized" } }
+      }
+    },
+    "/auth/logout": {
+      post: {
+        summary: "Log Out user",
+        security: [{ BearerAuth: [] }],
+        responses: { "204": { description: "No Content" }, "401": { description: "Unauthorized" } }
+      }
+    },
+    "/public/info": {
+      get: {
+        summary: "Public endpoint",
+        responses: { "200": { description: "OK" } }
+      }
+    },
+    "/protected/profile": {
+      get: {
+        summary: "Protected Profile endpoint",
+        security: [{ BearerAuth: [] }],
+        responses: { "200": { description: "OK" }, "401": { description: "Unauthorized" } }
+      }
     }
   }
 };
+
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 const PORT = process.env.PORT || 3000;
